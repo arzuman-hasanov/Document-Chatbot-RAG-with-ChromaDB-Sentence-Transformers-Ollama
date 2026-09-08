@@ -1,246 +1,380 @@
 # Document Chatbot MVP
 
-This project is a lightweight document Q&A application for English documents and English questions. It includes ingestion, chunking, local embeddings, ChromaDB vector storage, retrieval, a local Ollama LLM layer, and a Streamlit UI.
+A local document question-answering chatbot built with **Streamlit, Retrieval-Augmented Generation (RAG), ChromaDB, Sentence Transformers, and Ollama**.
 
-## Selected Ollama model
+Upload PDF, DOCX, or TXT documents, index them locally, and ask questions about their contents. The system retrieves relevant document chunks and provides grounded answers using a locally running LLM.
 
-I selected `llama3.2:3b` for the local LLM. It is a practical, small model for a normal Windows PC and works well for local document-grounded Q&A without requiring any paid API.
+> **MVP status:** This project is designed as a local, single-user prototype for document-based question answering.
 
-## Overview
+## Features
 
-The MVP follows this flow:
+* 📄 Upload **PDF, DOCX, and TXT** documents
+* 🔎 Semantic search using local embeddings
+* 🧠 Retrieval-Augmented Generation (RAG)
+* 💾 Persistent local vector storage with ChromaDB
+* 🤖 Local LLM inference with Ollama
+* 🖥️ Streamlit web interface
+* 📚 Source document and chunk references
+* 🎯 Relevance filtering for retrieved chunks
+* 🔒 No external LLM API required
+* 🧪 Automated tests for RAG and vector-store behavior
 
-1. Upload a PDF, DOCX, or TXT file.
-2. Parse and normalize the document text.
-3. Split the text into chunks with overlap.
-4. Generate local embeddings with `sentence-transformers`.
-5. Store chunks and metadata in a persistent ChromaDB collection.
-6. Embed the user question and retrieve the most relevant chunks.
-7. Send those chunks to Ollama as context.
-8. Return an answer with source documents and chunk references.
+## Architecture
 
-## Project structure
+```text
+                     ┌─────────────────────┐
+                     │   Streamlit UI      │
+                     │      app.py         │
+                     └──────────┬──────────┘
+                                │
+                                ▼
+                     ┌─────────────────────┐
+                     │     ChatService     │
+                     └──────────┬──────────┘
+                                │
+                                ▼
+                     ┌─────────────────────┐
+                     │     RAGService      │
+                     └───────┬───────┬─────┘
+                             │       │
+                ┌────────────┘       └──────────────┐
+                ▼                                   ▼
+      ┌───────────────────┐               ┌──────────────────┐
+      │ Document Ingestion│               │ Vector Store     │
+      │      & Chunking   │               │    ChromaDB      │
+      └─────────┬─────────┘               └────────┬─────────┘
+                │                                  │
+                ▼                                  ▼
+      ┌───────────────────┐               ┌──────────────────┐
+      │ Sentence          │               │ Semantic         │
+      │ Transformers      │◄──────────────┤ Retrieval        │
+      └───────────────────┘               └────────┬─────────┘
+                                                   │
+                                                   ▼
+                                        ┌────────────────────┐
+                                        │   Ollama LLM       │
+                                        │  Local Generation  │
+                                        └────────────────────┘
+```
+
+## How It Works
+
+The application follows a standard local RAG pipeline:
+
+```text
+Document
+   ↓
+Text extraction
+   ↓
+Text normalization
+   ↓
+Chunking
+   ↓
+Embedding generation
+   ↓
+ChromaDB
+   ↓
+User question
+   ↓
+Question embedding
+   ↓
+Semantic retrieval
+   ↓
+Relevance filtering
+   ↓
+Relevant context
+   ↓
+Ollama
+   ↓
+Grounded answer
+```
+
+### 1. Document ingestion
+
+Uploaded PDF, DOCX, and TXT files are parsed and converted into normalized text.
+
+### 2. Chunking
+
+Documents are divided into smaller chunks so that relevant sections can be retrieved independently.
+
+Default configuration:
+
+* Chunk size: `800` characters
+* Chunk overlap: `120` characters
+
+### 3. Embeddings
+
+The project uses a local Sentence Transformer model to convert document chunks and user questions into vector embeddings.
+
+Default model:
+
+```text
+sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+```
+
+### 4. Vector search
+
+Embeddings are stored in a persistent **ChromaDB** collection using cosine distance.
+
+Relevant chunks are retrieved based on semantic similarity.
+
+The application also applies a configurable retrieval-distance threshold so that weak or unrelated results are not unnecessarily passed to the LLM.
+
+### 5. Answer generation
+
+Relevant document context is sent to a locally running **Ollama** model.
+
+The LLM is instructed to:
+
+* answer using only the supplied document context
+* answer the question directly
+* avoid unnecessary explanations
+* avoid repeating retrieved context
+* avoid inventing information
+* indicate when the answer cannot be found
+
+## Tech Stack
+
+| Component       | Technology            |
+| --------------- | --------------------- |
+| UI              | Streamlit             |
+| Language        | Python                |
+| RAG             | Custom RAG pipeline   |
+| Vector database | ChromaDB              |
+| Embeddings      | Sentence Transformers |
+| LLM             | Ollama                |
+| Default LLM     | `llama3.2:3b`         |
+| PDF extraction  | PyMuPDF               |
+| DOCX extraction | python-docx           |
+| Testing         | pytest                |
+
+## Project Structure
 
 ```text
 .
-├── .env.example
-├── .gitignore
-├── .python-version
-├── README.md
-├── requirements.txt
 ├── app.py
-├── main.py
+├── config.py
+├── requirements.txt
+├── .env.example
+├── README.md
+│
 ├── document_chatbot/
-│   ├── __init__.py
-│   ├── __main__.py
-│   ├── app.py
-│   ├── config.py
 │   ├── chat/
-│   │   ├── __init__.py
-│   │   ├── models.py
-│   │   └── service.py
 │   ├── chunking/
-│   │   ├── __init__.py
-│   │   ├── models.py
-│   │   └── service.py
 │   ├── embeddings/
-│   │   ├── __init__.py
-│   │   └── service.py
 │   ├── ingestion/
-│   │   ├── __init__.py
-│   │   ├── base.py
-│   │   ├── exceptions.py
-│   │   ├── models.py
-│   │   ├── parsers.py
-│   │   └── service.py
 │   ├── llm/
-│   │   ├── __init__.py
-│   │   └── service.py
 │   ├── rag/
-│   │   ├── __init__.py
-│   │   └── service.py
-│   ├── services/
-│   │   └── __init__.py
 │   └── vectorstore/
-│       ├── __init__.py
-│       └── service.py
+│
 ├── tests/
-│   ├── test_chunking.py
-│   ├── test_embeddings_vectorstore.py
-│   ├── test_ingestion.py
 │   ├── test_rag_mvp.py
-│   └── __init__.py
-├── data/
-│   └── chroma_db/
-├── .venv/
-└── .cache/
+│   └── test_embeddings_vectorstore.py
+│
+└── data/
+    └── chroma_db/
 ```
 
-## Python version
+## Requirements
 
-This project targets Python 3.13.
+* Python 3.10+
+* Ollama
+* A local Ollama model
+* Enough RAM/storage to run the embedding model and LLM locally
 
-## Setup
+## Installation
 
-Create and activate a virtual environment on Windows:
+Clone the repository:
 
-```powershell
-py -3.13 -m venv .venv
-.\.venv\Scripts\Activate.ps1
+```bash
+git clone https://github.com/YOUR_USERNAME/document-chatbot.git
+cd document-chatbot
 ```
 
-If PowerShell blocks scripts, run:
+Create a virtual environment:
 
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\.venv\Scripts\Activate.ps1
+### Windows
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+```
+
+### macOS / Linux
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
 ```
 
 Install dependencies:
 
-```powershell
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+```bash
+pip install -r requirements.txt
 ```
 
-## Ollama setup on Windows
+## Ollama Setup
 
-1. Download and install Ollama from:
-   https://ollama.com/download/windows
-2. After installation, restart your terminal or PowerShell session.
-3. Pull the selected model:
+Install Ollama and make sure the Ollama server is running.
 
-```powershell
+Pull the default model:
+
+```bash
 ollama pull llama3.2:3b
 ```
 
-4. Start the local Ollama server:
+Start the Ollama server if necessary:
 
-```powershell
+```bash
 ollama serve
 ```
 
-5. Optionally verify the model is available:
+The application expects Ollama at:
 
-```powershell
-ollama list
+```text
+http://localhost:11434
 ```
 
-If you prefer to run the model directly for testing:
+You can change this through environment variables.
 
-```powershell
-ollama run llama3.2:3b
+## Configuration
+
+Copy the example environment file:
+
+```bash
+cp .env.example .env
 ```
 
-## Environment configuration
-
-Copy the example environment file and set your values:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Then edit `.env` and configure:
+Example configuration:
 
 ```env
 OLLAMA_MODEL=llama3.2:3b
 OLLAMA_BASE_URL=http://localhost:11434
+
 CHUNK_SIZE=800
 CHUNK_OVERLAP=120
+
 RETRIEVAL_RESULT_COUNT=5
 RETRIEVAL_DISTANCE_THRESHOLD=1.0
-VECTOR_DB_PATH=./data/chroma_db
-VECTOR_DB_COLLECTION_NAME=document_chunks
-EMBEDDING_MODEL_NAME=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+
+CHROMA_DB_PATH=./data/chroma_db
+CHROMA_COLLECTION_NAME=document_chunks
 ```
 
-`RETRIEVAL_DISTANCE_THRESHOLD` is a maximum Chroma cosine distance: lower values
-are more relevant. The default `1.0` filters weak cross-document matches while
-retaining close matches. Set it to `2.0` to disable distance filtering.
+On Windows, you can simply create `.env` manually if `cp` is unavailable.
 
-Important notes:
-- There is no API key required for Ollama.
-- The app uses local ChromaDB storage under `data/chroma_db` by default.
-- The first run downloads the local embedding model to the Hugging Face cache if it is not already available.
+## Run the Application
 
-## Start the Streamlit app
+Start Streamlit:
 
-```powershell
+```bash
 streamlit run app.py
 ```
 
-The app will allow you to:
-- upload PDF, DOCX, and TXT files
-- index documents
-- view indexed source documents
-- ask English questions
-- view the answer and source references
+Then open the local Streamlit URL shown in the terminal, normally:
 
-## How it works
-
-The document chatbot uses:
-
-- `DocumentIngestionService` to parse uploaded files.
-- `DocumentChunker` to split text into useful chunks.
-- `EmbeddingService` to create local embeddings with a multilingual sentence-transformers model.
-- `VectorStoreService` to store chunks and metadata in ChromaDB.
-- `RAGService` to orchestrate retrieval.
-- `OllamaChatService` to generate final answers using the retrieved document context.
-
-The LLM is instructed to answer only from the provided context and to say clearly when the information is not found in the uploaded documents.
-
-## Development timing logs
-
-The application emits INFO-level timing logs while answering a question. The logs include:
-
-- query embedding time
-- ChromaDB retrieval time
-- Ollama generation time
-- total response time
-- configured embedding and Ollama models
-- embedding device (CPU/GPU when reported by sentence-transformers)
-- retrieved chunk count
-- approximate context/prompt size
-
-Run Streamlit from a terminal to see these logs:
-
-```powershell
-streamlit run app.py
+```text
+http://localhost:8501
 ```
 
-The Ollama HTTP API does not expose CPU/GPU usage for an individual chat request, so Ollama acceleration is logged as `unknown` rather than guessed.
+## Example
 
-## Example usage
+Upload a document such as a CV or technical document.
 
-```python
-from pathlib import Path
+Then ask:
 
-from document_chatbot.chat import ChatService
-from document_chatbot.rag import RAGService
-
-rag_service = RAGService()
-rag_service.index_document(Path("sample.pdf"))
-
-chat_service = ChatService(rag_service=rag_service)
-response = chat_service.ask("What is the main topic of the document?")
-
-print(response.answer)
-print(response.source_documents)
-print(response.source_chunk_indexes)
+```text
+What is his name?
 ```
+
+The system retrieves the relevant document chunk and generates a concise grounded response such as:
+
+```text
+Arzuman Hasanov
+```
+
+The UI also displays the source document and chunk used for the retrieval.
 
 ## Testing
 
-Run the full suite:
+Run the complete test suite:
 
-```powershell
+```bash
 python -m pytest
 ```
 
-## Current limitations
+Compile-check the project:
 
-- This MVP is intentionally limited to English documents and English questions.
-- It uses a local model for embeddings and a local ChromaDB instance; it is not a production-scale distributed deployment.
-- The app does not include authentication, multi-user support, or advanced UI features.
-- Ollama must be installed and running locally on the machine.
-- The first embedding model download may take time on the first run.
+```bash
+python -m compileall -q app.py document_chatbot tests
+```
+
+The test suite covers areas including:
+
+* document ingestion
+* chunking
+* embeddings
+* ChromaDB retrieval
+* retrieval-distance filtering
+* RAG behavior
+* source metadata
+* no-result behavior
+* stale document re-indexing
+* cross-document retrieval isolation
+
+## Privacy
+
+The application is designed to run locally.
+
+Documents are processed and stored locally, embeddings are generated locally, and the LLM is accessed through a local Ollama server.
+
+No external LLM API is required for the MVP.
+
+## Current Limitations
+
+This is an MVP and has several known limitations:
+
+* No OCR for scanned/image-only PDFs
+* English-focused question answering
+* Character-based chunking
+* No reranking model
+* No exact citation offsets
+* No answer confidence score
+* Limited document-format support
+* DOCX extraction focuses primarily on document paragraphs
+* Local/single-user architecture
+* Performance depends on local hardware
+* Ollama must be installed and running for answer generation
+
+## Future Improvements
+
+Potential future improvements include:
+
+* OCR support for scanned PDFs
+* Better semantic/structure-aware chunking
+* Retrieval reranking
+* Hybrid keyword + semantic search
+* Improved citation and source highlighting
+* Streaming LLM responses
+* Conversation memory
+* Multiple embedding-model support
+* Additional document formats
+* Authentication and multi-user support
+* Production deployment
+* Evaluation datasets and retrieval/answer quality metrics
+
+## License
+
+Add your preferred license here.
+
+For example:
+
+```text
+MIT License
+```
+
+## Author
+
+**Arzuman Hasanov**
+
+Built as a local RAG/document-Q&A MVP using Python, Streamlit, ChromaDB, Sentence Transformers, and Ollama.
