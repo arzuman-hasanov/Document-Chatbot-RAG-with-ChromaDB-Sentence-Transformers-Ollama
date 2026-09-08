@@ -1,10 +1,10 @@
-# Document Chatbot MVP
+# Document Chatbot
 
 A local document question-answering chatbot built with **Streamlit, Retrieval-Augmented Generation (RAG), ChromaDB, Sentence Transformers, and Ollama**.
 
 Upload PDF, DOCX, or TXT documents, index them locally, and ask questions about their contents. The system retrieves relevant document chunks and provides grounded answers using a locally running LLM.
 
-> **MVP status:** This project is designed as a local, single-user prototype for document-based question answering.
+
 
 ## Features
 
